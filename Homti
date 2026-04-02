@@ -1,0 +1,130 @@
+{
+  "name": "houmti-saas-algeria",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "14.1.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "cloudinary": "^2.0.1",
+    "openai": "^4.28.0",
+    "mongoose": "^8.1.1",
+    "telegraf": "^4.15.3",
+    "tailwindcss": "^3.4.1",
+    "lucide-react": "^0.323.0",
+    "axios": "^1.6.7"
+  }
+}
+"use client";
+import { useState } from 'react';
+
+const WILAYAS = ["الجزائر", "وهران", "سطيف", "قسنطينة", "عنابة", "تلمسان", "بشار"]; // أكمل الـ 58 ولاية هنا
+
+export default function LandingPage() {
+  const [order, setOrder] = useState({ name: '', phone: '', wilaya: 'الجزائر' });
+  const [status, setStatus] = useState("");
+
+  const handleOrder = async (e) => {
+    e.preventDefault();
+    if (!order.phone.match(/^(05|06|07)[0-9]{8}$/)) {
+      return alert("يرجى إدخال رقم هاتف جزائري صحيح");
+    }
+    setStatus("جاري إرسال طلبك...");
+    const res = await fetch('/api/order', {
+      method: 'POST',
+      body: JSON.stringify(order),
+    });
+    if (res.ok) setStatus("✅ تم استلام طلبك بنجاح! سنتصل بك قريباً.");
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 text-right font-sans" dir="rtl">
+      <header className="bg-green-600 p-4 text-white text-center text-2xl font-bold shadow-lg">حومتي - Houmti</header>
+      <main className="p-6 max-w-xl mx-auto">
+        <div className="bg-white p-6 rounded-2xl shadow-md border-2 border-green-100">
+          <h2 className="text-xl font-bold mb-4 text-green-700">طلب سريع - الدفع عند الاستلام</h2>
+          <form onSubmit={handleOrder} className="space-y-4">
+            <input className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="الاسم الكامل" required onChange={e => setOrder({...order, name: e.target.value})} />
+            <input className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="رقم الهاتف (05/06/07)" required onChange={e => setOrder({...order, phone: e.target.value})} />
+            <select className="w-full p-3 border rounded-lg" onChange={e => setOrder({...order, wilaya: e.target.value})}>
+              {WILAYAS.map(w => <option key={w} value={w}>{w}</option>)}
+            </select>
+            <button className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg text-lg">تأكيد الطلب الآن</button>
+          </form>
+          <p className="mt-4 text-center text-sm text-gray-500">{status}</p>
+        </div>
+      </main>
+    </div>
+  );
+}
+"use client";
+import { useState } from 'react';
+import { Camera, Sparkles } from 'lucide-react';
+
+export default function AdminAI() {
+  const [loading, setLoading] = useState(false);
+  const [resData, setResData] = useState(null);
+
+  const processImage = async (e) => {
+    setLoading(true);
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch('/api/ai-vision', { method: 'POST', body: formData });
+    const data = await res.json();
+    setResData(data);
+    setLoading(false);
+  };
+
+  return (
+    <div className="p-6 text-right max-w-lg mx-auto" dir="rtl">
+      <h1 className="text-2xl font-black mb-6">لوحة تحكم حومتي (AI)</h1>
+      <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-green-300 rounded-3xl cursor-pointer bg-green-50 hover:bg-green-100">
+        <Camera className="w-12 h-12 text-green-600 mb-2" />
+        <span className="text-green-700 font-bold">التقط صورة المنتج الآن</span>
+        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={processImage} />
+      </label>
+      {loading && <div className="mt-6 p-4 bg-yellow-50 text-yellow-700 rounded-xl animate-pulse">جاري إزالة الخلفية وتحليل المنتج بـ AI...</div>}
+      {resData && (
+        <div className="mt-6 p-6 bg-white shadow-xl rounded-3xl border border-green-200">
+          <Sparkles className="text-yellow-500 mb-2" />
+          <h3 className="font-bold text-lg">{resData.name}</h3>
+          <p className="text-green-600 font-black text-xl my-2">{resData.price} دج</p>
+          <p className="text-gray-600 text-sm">{resData.description}</p>
+          <button className="w-full mt-4 bg-black text-white py-3 rounded-xl">نشر في المتجر فوراً</button>
+        </div>
+      )}
+    </div>
+  );
+}
+import { NextResponse } from 'next/server';
+
+export async function POST(req) {
+  const data = await req.json();
+  const botToken = process.env.TELEGRAM_TOKEN;
+  const chatId = process.env.ADMIN_CHAT_ID;
+
+  const text = `
+🆕 *طلب جديد من حومتي!*
+────────────────
+👤 الزبون: ${data.name}
+📞 الهاتف: ${data.phone}
+📍 الولاية: ${data.wilaya}
+📦 الحالة: الدفع عند الاستلام
+────────────────
+📱 [اضغط هنا للاتصال بالزبون](tel:${data.phone})
+  `;
+
+  await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'Markdown' })
+  });
+
+  return NextResponse.json({ success: true });
+}
